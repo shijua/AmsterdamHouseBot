@@ -15,6 +15,7 @@ def _raw_listing(**overrides):
         "rooms_count": 2,
         "bedrooms": 1,
         "living_area": 55,
+        "property_details": SimpleNamespace(object_type="apartment"),
         "media": SimpleNamespace(photo_urls=("https://images.example/funda.jpg",)),
         "tiny_id": "12345678",
         "global_id": 87654321,
@@ -40,6 +41,7 @@ class FundaScraperTests(unittest.TestCase):
         self.assertEqual(listing.size_m2, "55 m2")
         self.assertEqual(listing.size_m2_value, 55)
         self.assertEqual(listing.image_url, "https://images.example/funda.jpg")
+        self.assertEqual(listing.property_type, "apartment")
 
     def test_scrape_sync_uses_rental_filters_pages_and_deduplicates(self):
         raw_listing = _raw_listing()
@@ -70,6 +72,7 @@ class FundaScraperTests(unittest.TestCase):
             max_price=2000,
             min_bedrooms=2,
             min_size_m2=50,
+            property_types=("apartment",),
         )
 
         with (
@@ -95,8 +98,17 @@ class FundaScraperTests(unittest.TestCase):
                 "max_price": 2000,
                 "min_bedrooms": 2,
                 "min_area": 50,
+                "object_type": "apartment",
             },
         )
+
+    def test_apartment_filter_rejects_non_apartment_result(self):
+        scraper = FundaScraper(max_price=0, property_types=("apartment",))
+        listing = scraper._convert_listing(
+            _raw_listing(property_details=SimpleNamespace(object_type="house"))
+        )
+
+        self.assertFalse(scraper._matches_filters(listing))
 
     def test_convert_listing_keeps_bedrooms_separate_from_total_rooms(self):
         listing = FundaScraper()._convert_listing(_raw_listing(rooms_count=1, bedrooms=0))

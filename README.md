@@ -17,7 +17,8 @@ The bot stores user filters and already-seen listings in SQLite, so duplicate li
 
 - Runs every enabled platform on the same fast scan cadence
 - Checks both the Amsterdam Pararius search page and Pararius' public newest-rentals feed
-- Lets each Telegram user save their own Kamernet property types, rent, bedroom/room, and surface-area filters
+- Lets each Telegram user save rental preferences, rent, bedroom/room, and surface-area filters
+- Applies Apartment to Kamernet, Huurwoningen, Pararius, and Funda; applies Furnished to all of those except Funda
 - Sends new listings directly in Telegram
 - Can automatically reply to new matching Kamernet listings when explicitly enabled
 - Supports an on-demand scan with `/test`
@@ -71,7 +72,8 @@ Create a `.env` file in the project root with the following content:
 
 ```env
 TELEGRAM_TOKEN=123456789:replace-with-your-real-token
-FAST_POLL_INTERVAL_SECONDS=60
+FAST_POLL_INTERVAL_SECONDS=900
+SCAN_JITTER_SECONDS=30
 SCRAPER_TIMEOUT_SECONDS=45
 KAMERNET_AUTOREPLY_TIMEOUT_SECONDS=45
 KAMERNET_AUTOREPLY_MAX_PER_SCAN=2
@@ -99,8 +101,9 @@ TELEGRAM_ALLOWED_CHAT_IDS=123456789
 Environment variables:
 
 - `TELEGRAM_TOKEN`: required, Telegram bot token from BotFather
-- `FAST_POLL_INTERVAL_SECONDS`: optional, scan interval for every enabled platform, defaults to `PARARIUS_POLL_INTERVAL_SECONDS` when set, otherwise the lower of `POLL_INTERVAL_SECONDS` and `60`
-- `POLL_INTERVAL_SECONDS`: optional, legacy fallback used only to derive `FAST_POLL_INTERVAL_SECONDS`, defaults to `300`
+- `FAST_POLL_INTERVAL_SECONDS`: optional, scan interval for every enabled platform, defaults to `PARARIUS_POLL_INTERVAL_SECONDS` when set, otherwise `POLL_INTERVAL_SECONDS` (`900` by default)
+- `SCAN_JITTER_SECONDS`: optional, adds a random delay from zero up to this many seconds to each scheduled scan, defaults to `30`
+- `POLL_INTERVAL_SECONDS`: optional, legacy fallback used only to derive `FAST_POLL_INTERVAL_SECONDS`, defaults to `900`
 - `PARARIUS_POLL_INTERVAL_SECONDS`: optional, legacy fallback for `FAST_POLL_INTERVAL_SECONDS`
 - `ROOFZ_POLL_INTERVAL_SECONDS`: deprecated; Roofz now uses the same fast interval as every other enabled platform
 - `SCRAPER_TIMEOUT_SECONDS`: optional, timeout for general scrapers, defaults to `45`
@@ -145,7 +148,7 @@ On first boot the bot automatically creates the SQLite database and its tables.
 1. Open your bot in Telegram.
 2. Send `/start`.
 3. Send `/search` to configure:
-   - Kamernet property types. Tap one or more types, then tap `Done`.
+   - Rental preferences. Tap one or more options, then tap `Done`.
    - max monthly rent
    - minimum bedrooms/rooms
    - minimum surface area in square meters
@@ -172,7 +175,10 @@ After that, the scheduled scanner will keep running in the background while the 
 
 `/search` options:
 
-- Kamernet property types: `Any property type`, `Room`, `Apartment`, `Studio`, `Anti-squat`, `Student Housing`, `Furnished`, `Short Term`, `Long Term`
+- Rental preferences: `Any property type`, `Room`, `Apartment`, `Studio`, `Anti-squat`, `Student Housing`, `Furnished`, `Short Term`, `Long Term`
+- `Apartment` applies to Kamernet, Huurwoningen, Pararius, and Funda.
+- `Furnished` applies to Kamernet, Huurwoningen, and Pararius; Funda does not expose a reliable furnishing filter.
+- `Short Term` and `Long Term` remain Kamernet-only.
 - Max rent: number in EUR, or `0` for no limit
 - Minimum bedrooms/rooms: number, or `0` for no minimum
 - Minimum size: number in m2, or `0` for no minimum
@@ -233,7 +239,7 @@ Your `.env` file is missing or the token is empty.
 
 - Make sure you ran `/start` and `/search`
 - Run `/test` to check whether listings are available right now
-- Verify that your Kamernet property types, rent, bedroom/room, and size filters are not too restrictive
+- Verify that your rental preferences, rent, bedroom/room, and size filters are not too restrictive
 
 ### I want to start fresh
 

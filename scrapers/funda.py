@@ -73,6 +73,12 @@ class FundaScraper(BaseScraper):
             filters["min_bedrooms"] = self.min_bedrooms
         if self.min_size_m2:
             filters["min_area"] = self.min_size_m2
+        if self.property_types:
+            filters["object_type"] = (
+                self.property_types[0]
+                if len(self.property_types) == 1
+                else list(self.property_types)
+            )
 
         max_pages = max(1, config.FUNDA_MAX_PAGES_PER_SCAN)
         with client_cls(
@@ -116,6 +122,10 @@ class FundaScraper(BaseScraper):
 
         size_value = _as_int(getattr(raw_listing, "living_area", None))
         size_label = f"{size_value} m2" if size_value else None
+        property_details = getattr(raw_listing, "property_details", None)
+        property_type = _normalize_funda_property_type(
+            getattr(property_details, "object_type", None)
+        )
 
         return Listing(
             id=listing_id,
@@ -130,6 +140,7 @@ class FundaScraper(BaseScraper):
             price_eur=price_eur,
             bedrooms=bedrooms_count,
             size_m2_value=size_value,
+            property_type=property_type,
         )
 
 
@@ -250,3 +261,13 @@ def _release_funda_thread_slot() -> None:
         _FUNDA_THREAD_SEMAPHORE.release()
     except ValueError:
         logger.warning("Funda thread slot release was ignored because no slot was held.")
+
+
+def _normalize_funda_property_type(value) -> str | None:
+    text = _first_text(value).lower()
+    return {
+        "apartment": "apartment",
+        "appartement": "apartment",
+        "house": "house",
+        "huis": "house",
+    }.get(text)

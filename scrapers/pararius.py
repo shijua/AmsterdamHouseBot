@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from .base import BaseScraper, Listing, parse_euro_amount, parse_first_int
+from .base import BaseScraper, Listing, parse_euro_amount, parse_first_int, parse_furnishing
 from .http_clients import close_httpx_client, close_shared_session, get_httpx_client, get_shared_session
 
 logger = logging.getLogger(__name__)
@@ -188,6 +188,7 @@ class ParariusScraper(BaseScraper):
             price = price_tag.get_text(" ", strip=True) if price_tag else _extract_price(article_text)
 
             rooms, bedrooms, size_label, size_value = None, None, None, None
+            furnishing = None
             for feature in article.select(".listing-search-item__features li"):
                 text = feature.get_text(" ", strip=True)
                 lower = text.lower()
@@ -197,6 +198,8 @@ class ParariusScraper(BaseScraper):
                 elif "kamer" in lower or "slaapkamer" in lower:
                     rooms = text
                     bedrooms = parse_first_int(text)
+                elif parsed_furnishing := parse_furnishing(text):
+                    furnishing = parsed_furnishing
 
             if not size_label:
                 size_value = _extract_size(article_text)
@@ -220,6 +223,8 @@ class ParariusScraper(BaseScraper):
                 price_eur=parse_euro_amount(price),
                 bedrooms=bedrooms,
                 size_m2_value=size_value,
+                property_type=_property_type_from_url(relative_url),
+                furnishing=furnishing,
             )
         except Exception as exc:
             logger.warning("Failed to parse Pararius article: %s", exc)
@@ -247,6 +252,26 @@ def _listing_id_from_url(url: str) -> str:
     if match:
         return match.group(1)
     return url.rstrip("/").split("/")[-1]
+
+
+def _property_type_from_url(url: str) -> str | None:
+    match = re.search(
+        r"/(?:appartement|apartment|huis|house|kamer|room|studio)-(?:te-huur|for-rent)/",
+        url,
+        re.I,
+    )
+    if not match:
+        return None
+    value = match.group(0).split("-", 1)[0].strip("/").lower()
+    return {
+        "appartement": "apartment",
+        "apartment": "apartment",
+        "huis": "house",
+        "house": "house",
+        "kamer": "room",
+        "room": "room",
+        "studio": "studio",
+    }.get(value)
 
 
 def _title_from_url(url: str) -> str:

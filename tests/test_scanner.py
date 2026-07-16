@@ -43,6 +43,28 @@ class _FakeScraper:
 
 
 class ScannerTests(unittest.IsolatedAsyncioTestCase):
+    def test_build_scraper_routes_supported_preferences_per_source(self):
+        user_filters = {
+            **_filters(),
+            "kamernet_property_type": "apartment,furnished,long_term",
+        }
+
+        kamernet = scanner._build_scraper("kamernet", user_filters)
+        huurwoningen = scanner._build_scraper("huurwoningen", user_filters)
+        pararius = scanner._build_scraper("pararius", user_filters)
+        funda = scanner._build_scraper("funda", user_filters)
+
+        self.assertEqual(
+            kamernet.search_preferences,
+            ("apartment", "furnished", "long_term"),
+        )
+        self.assertEqual(huurwoningen.property_types, ("apartment",))
+        self.assertTrue(huurwoningen.furnished)
+        self.assertEqual(pararius.property_types, ("apartment",))
+        self.assertTrue(pararius.furnished)
+        self.assertEqual(funda.property_types, ("apartment",))
+        self.assertFalse(funda.furnished)
+
     async def test_vva_is_registered_as_general_source(self):
         self.assertIn(scanner.VVA_SOURCE, scanner.GENERAL_SOURCES)
         self.assertIn(scanner.VVA_SOURCE, scanner.FAST_SOURCES)

@@ -12,7 +12,7 @@ import db
 from kamernet_autoreply import KamernetAutoReplyResult, send_kamernet_autoreply
 from scrapers.funda import FundaScraper
 from scrapers.huurwoningen import HuurwoningenScraper
-from scrapers.kamernet import KamernetScraper
+from scrapers.kamernet import KamernetScraper, normalize_kamernet_property_types
 from scrapers.pararius import ParariusScraper
 from scrapers.roofz import RoofzScraper
 from scrapers.vva import VVAScraper
@@ -190,6 +190,15 @@ def _normalize_sources(sources: Iterable[str] | None) -> tuple[str, ...]:
 
 
 def _build_scraper(source: str, user_filters: dict):
+    preferences = normalize_kamernet_property_types(
+        user_filters.get("kamernet_property_type", "any")
+    )
+    shared_property_types = tuple(
+        preference
+        for preference in preferences
+        if preference == "apartment"
+    )
+    furnished = "furnished" in preferences
     common_kwargs = {
         "city": user_filters["city"],
         "max_price": user_filters["max_price"],
@@ -197,16 +206,27 @@ def _build_scraper(source: str, user_filters: dict):
         "min_size_m2": user_filters["min_size_m2"],
     }
     if source == PARARIUS_SOURCE:
-        return ParariusScraper(**common_kwargs)
+        return ParariusScraper(
+            **common_kwargs,
+            property_types=shared_property_types,
+            furnished=furnished,
+        )
     if source == FUNDA_SOURCE:
-        return FundaScraper(**common_kwargs)
+        return FundaScraper(
+            **common_kwargs,
+            property_types=shared_property_types,
+        )
     if source == KAMERNET_SOURCE:
         return KamernetScraper(
             **common_kwargs,
             property_type=user_filters.get("kamernet_property_type", "any"),
         )
     if source == HUURWONINGEN_SOURCE:
-        return HuurwoningenScraper(**common_kwargs)
+        return HuurwoningenScraper(
+            **common_kwargs,
+            property_types=shared_property_types,
+            furnished=furnished,
+        )
     if source == VVA_SOURCE:
         return VVAScraper(**common_kwargs)
     if source == ROOFZ_SOURCE:

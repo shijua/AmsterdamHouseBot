@@ -38,7 +38,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "lxml", specifier = "==6.1.0" },
     { name = "playwright", specifier = "==1.59.0" },
-    { name = "pyfunda", specifier = "==3.1.1" },
+    { name = "pyfunda", specifier = "==3.1.3" },
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "python-telegram-bot", extras = ["job-queue"], specifier = "==21.10" },
 ]
@@ -374,16 +374,16 @@ wheels = [
 
 [[package]]
 name = "pyfunda"
-version = "3.1.1"
+version = "3.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "curl-cffi" },
     { name = "tls-client" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5d/3c/e797202c87aacaea0ae539649e5f9d57299da4feb18a53a23e8061d0f318/pyfunda-3.1.1.tar.gz", hash = "sha256:0c4c33de63586f1fa5d226772d02c2f6efb66ef7cc8f0fbd179f025956720c49", size = 65268, upload-time = "2026-05-11T19:45:14.722Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/d6/99db00268f9af23f3c254b022c9f995686b15099f2ec72611c00cf78918b/pyfunda-3.1.3.tar.gz", hash = "sha256:3a5d6672eeaea14d8e0e57723aa1541189a5a8489857224c5d14e743bdd3cb3f", size = 66130, upload-time = "2026-07-02T13:46:27.515Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/44/bebae804be01c1239a953a44c810490dfde5084510de6f236c93fdc51640/pyfunda-3.1.1-py3-none-any.whl", hash = "sha256:b5bdb0d789dd198db2b501c64b1ebfc2db7bce751be8bf4ceb2ad644a3bc19f0", size = 46591, upload-time = "2026-05-11T19:45:13.601Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/35/a35e6314089118d98eacd97d8c88f729ef13f3a95d3fe35f083dbfd465d6/pyfunda-3.1.3-py3-none-any.whl", hash = "sha256:6e6710cbc0aec532143d44ee2cfd5cd5135ddf9772fef418797550fabeaae4ff", size = 46976, upload-time = "2026-07-02T13:46:26.525Z" },
 ]
 
 [[package]]

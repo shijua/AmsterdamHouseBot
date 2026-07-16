@@ -58,7 +58,43 @@ CITY_HTML = """
 """
 
 
+PREFERENCE_HTML = """
+<html><body>
+  <section class="listing-search-item">
+    <a class="listing-search-item__link--title" href="/appartement-te-huur/amsterdam/aaaaaaaa/singel">Appartement Singel</a>
+    <h2 class="listing-search-item__title">Appartement Singel</h2>
+    <div class="listing-search-item__sub-title">1012 AB Amsterdam</div>
+    <div class="listing-search-item__price">EUR 1500 per maand</div>
+    <ul class="listing-search-item__features"><li>50 m2</li><li>2 kamers</li><li>Gestoffeerd of gemeubileerd</li></ul>
+  </section>
+  <section class="listing-search-item">
+    <a class="listing-search-item__link--title" href="/huis-te-huur/amsterdam/bbbbbbbb/markt">Huis Markt</a>
+    <h2 class="listing-search-item__title">Huis Markt</h2>
+    <div class="listing-search-item__sub-title">1013 AB Amsterdam</div>
+    <div class="listing-search-item__price">EUR 1400 per maand</div>
+    <ul class="listing-search-item__features"><li>80 m2</li><li>3 kamers</li><li>Gemeubileerd</li></ul>
+  </section>
+</body></html>
+"""
+
+
 class ParariusScraperTests(unittest.IsolatedAsyncioTestCase):
+    async def test_apartment_and_ambiguous_furnished_are_combined_with_and(self):
+        scraper = ParariusScraper(
+            city="Amsterdam",
+            max_price=2000,
+            min_bedrooms=0,
+            property_types=("apartment",),
+            furnished=True,
+        )
+        scraper._fetch_pages = AsyncMock(return_value=[("city", PREFERENCE_HTML)])
+
+        listings = await scraper.scrape()
+
+        self.assertEqual([listing.id for listing in listings], ["aaaaaaaa"])
+        self.assertEqual(listings[0].property_type, "apartment")
+        self.assertEqual(listings[0].furnishing, "upholstered_or_furnished")
+
     async def test_scrape_merges_latest_and_city_pages_without_duplicate_listing_ids(self):
         scraper = ParariusScraper(
             city="Amsterdam",

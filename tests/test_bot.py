@@ -46,7 +46,10 @@ class BotScheduleTests(unittest.TestCase):
     def test_schedule_fast_scan_uses_fast_interval(self):
         app = _FakeApplication()
 
-        with patch.object(bot.config, "FAST_POLL_INTERVAL_SECONDS", 12):
+        with (
+            patch.object(bot.config, "FAST_POLL_INTERVAL_SECONDS", 12),
+            patch.object(bot.config, "SCAN_JITTER_SECONDS", 3),
+        ):
             bot._schedule_fast_scan(
                 app,
                 bot.scheduled_roofz_scan,
@@ -62,8 +65,38 @@ class BotScheduleTests(unittest.TestCase):
         self.assertEqual(call["name"], "roofz-fast-scan")
         self.assertEqual(
             call["job_kwargs"],
-            {"coalesce": True, "max_instances": 1, "misfire_grace_time": 12},
+            {
+                "coalesce": True,
+                "max_instances": 1,
+                "misfire_grace_time": 12,
+                "jitter": 3,
+            },
         )
+
+    def test_scan_job_kwargs_omit_disabled_jitter(self):
+        with patch.object(bot.config, "SCAN_JITTER_SECONDS", 0):
+            job_kwargs = bot._scan_job_kwargs(300)
+
+        self.assertNotIn("jitter", job_kwargs)
+
+
+class BotFilterFormattingTests(unittest.TestCase):
+    def test_filter_summary_describes_cross_source_preferences(self):
+        summary = bot._format_filters(
+            {
+                "city": "Amsterdam",
+                "max_price": 1800,
+                "min_bedrooms": 1,
+                "min_size_m2": 30,
+                "kamernet_property_type": "apartment,furnished,long_term",
+                "active": True,
+                "setup_in_progress": False,
+                "kamernet_autoreply_enabled": False,
+            }
+        )
+
+        self.assertIn("Rental preferences: Apartment, Furnished, Long Term", summary)
+        self.assertIn("Furnished sources: Kamernet, Huurwoningen, Pararius", summary)
 
 
 class BotAutoreplyCommandTests(unittest.IsolatedAsyncioTestCase):

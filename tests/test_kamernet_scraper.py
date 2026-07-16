@@ -24,8 +24,8 @@ def _next_data_html(items: list[dict]) -> str:
     )
 
 
-def _listing_item(listing_id: str, street: str, price: int = 1650) -> dict:
-    return {
+def _listing_item(listing_id: str, street: str, price: int = 1650, **overrides) -> dict:
+    item = {
         "id": listing_id,
         "street": street,
         "city": "Amsterdam",
@@ -34,6 +34,8 @@ def _listing_item(listing_id: str, street: str, price: int = 1650) -> dict:
         "surfaceArea": 32,
         "url": f"/en/for-rent/studio-amsterdam/{street.lower().replace(' ', '-')}/studio-{listing_id}",
     }
+    item.update(overrides)
+    return item
 
 
 class KamernetScraperTests(unittest.IsolatedAsyncioTestCase):
@@ -41,6 +43,14 @@ class KamernetScraperTests(unittest.IsolatedAsyncioTestCase):
         url = KamernetScraper(city="Amsterdam")._build_url(page_no=2)
 
         self.assertIn("pageNo=2", url)
+
+    def test_build_url_combines_apartment_furnished_and_long_term(self):
+        url = KamernetScraper(
+            city="Amsterdam",
+            property_type="apartment,furnished,long_term",
+        )._build_url()
+
+        self.assertIn("searchCategories=2%2C17%2C19", url)
 
     async def test_fetch_pages_uses_configured_page_cap(self):
         scraper = KamernetScraper(city="Amsterdam")
@@ -85,6 +95,48 @@ class KamernetScraperTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(listings[-1].title, "De Wittenkade")
         self.assertEqual(listings[-1].price_eur, 1650)
+
+    async def test_scrape_locally_enforces_apartment_and_furnished(self):
+        apartment_furnished = _listing_item(
+            "2381000",
+            "Matching Apartment",
+            listingType=2,
+            furnishingId=4,
+        )
+        room_furnished = _listing_item(
+            "2381001",
+            "Wrong Room",
+            listingType=1,
+            furnishingId=4,
+        )
+        apartment_unfurnished = _listing_item(
+            "2381002",
+            "Wrong Furnishing",
+            listingType=2,
+            furnishingId=2,
+        )
+        scraper = KamernetScraper(
+            city="Amsterdam",
+            max_price=2000,
+            min_bedrooms=0,
+            property_type="apartment,furnished,long_term",
+        )
+        scraper._fetch_pages = AsyncMock(
+            return_value=[
+                (
+                    "https://kamernet.test/pageNo=1",
+                    _next_data_html(
+                        [apartment_furnished, room_furnished, apartment_unfurnished]
+                    ),
+                )
+            ]
+        )
+
+        listings = await scraper.scrape()
+
+        self.assertEqual([listing.id for listing in listings], ["2381000"])
+        self.assertEqual(listings[0].property_type, "apartment")
+        self.assertEqual(listings[0].furnishing, "furnished")
 
 
 if __name__ == "__main__":

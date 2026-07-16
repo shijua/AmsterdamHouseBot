@@ -4,7 +4,7 @@ from urllib.parse import urlencode, urljoin
 
 from bs4 import BeautifulSoup
 
-from .base import BaseScraper, Listing, parse_euro_amount, parse_first_int
+from .base import BaseScraper, Listing, parse_euro_amount, parse_first_int, parse_furnishing
 from .http_clients import close_httpx_client, close_shared_session, get_httpx_client, get_shared_session
 
 logger = logging.getLogger(__name__)
@@ -34,8 +34,13 @@ class HuurwoningenScraper(BaseScraper):
 
     def _build_url(self) -> str:
         city_slug = re.sub(r"[^a-z0-9]+", "-", self.city.lower()).strip("-")
-        url = f"{self.BASE_URL}/en/in/{city_slug}/"
+        if self.property_types == ("apartment",):
+            url = f"{self.BASE_URL}/en/appartement/huren/{city_slug}/"
+        else:
+            url = f"{self.BASE_URL}/en/in/{city_slug}/"
         params: dict[str, str] = {}
+        if self.furnished:
+            params["interior"] = "gemeubileerd"
         if self.max_price:
             params["price"] = f"0-{self.max_price}"
         if self.min_bedrooms:
@@ -112,6 +117,7 @@ class HuurwoningenScraper(BaseScraper):
             price = price_tag.get_text(" ", strip=True) if price_tag else ""
 
             rooms, bedrooms, size_label, size_value = None, None, None, None
+            furnishing = None
             for feature in article.select(".listing-search-item__features li"):
                 text = feature.get_text(" ", strip=True)
                 lower = text.lower()
@@ -121,6 +127,8 @@ class HuurwoningenScraper(BaseScraper):
                 elif "room" in lower or "bedroom" in lower or "kamer" in lower:
                     rooms = text
                     bedrooms = parse_first_int(text)
+                elif parsed_furnishing := parse_furnishing(text):
+                    furnishing = parsed_furnishing
 
             return Listing(
                 id=listing_id,
@@ -135,6 +143,8 @@ class HuurwoningenScraper(BaseScraper):
                 price_eur=parse_euro_amount(price),
                 bedrooms=bedrooms,
                 size_m2_value=size_value,
+                property_type=_property_type_from_listing(title, relative_url),
+                furnishing=furnishing,
             )
         except Exception as exc:
             logger.warning("Failed to parse Huurwoningen article: %s", exc)
@@ -149,6 +159,19 @@ def _nearest_supported_min(value: int, supported_values: tuple[int, ...]) -> int
 def _listing_id_from_url(url: str) -> str | None:
     match = re.search(r"/([0-9a-f]{8})(?:/|$)", url)
     return match.group(1) if match else None
+
+
+def _property_type_from_listing(title: str, url: str) -> str | None:
+    text = f"{title} {url}".lower()
+    if re.search(r"\b(?:flat|apartment|appartement)\b", text):
+        return "apartment"
+    if re.search(r"\b(?:house|huis)\b", text):
+        return "house"
+    if re.search(r"\b(?:room|kamer)\b", text):
+        return "room"
+    if re.search(r"\bstudio\b", text):
+        return "studio"
+    return None
 
 
 def _pick_image_url(article) -> str | None:

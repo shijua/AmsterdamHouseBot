@@ -26,6 +26,9 @@ kamernet_storage_state.json
 *.sqlite3
 *.sqlite3-*
 
+# Runtime logs
+*.log
+
 # IDE
 .vscode/
 .idea/

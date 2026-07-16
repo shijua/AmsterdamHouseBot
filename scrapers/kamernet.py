@@ -54,8 +54,11 @@ _DETAIL_TYPE_BY_LISTING_TYPE = {
     1: "room",
     2: "apartment",
     4: "studio",
-    8: "anti-squat",
+    8: "anti_squat",
 }
+
+_LOCAL_PROPERTY_TYPES = frozenset(_DETAIL_TYPE_BY_LISTING_TYPE.values())
+_FURNISHED_ID = 4
 
 
 class KamernetScraper(BaseScraper):
@@ -70,8 +73,20 @@ class KamernetScraper(BaseScraper):
         min_size_m2: int = 0,
         property_type: str | Iterable[str] = "any",
     ):
-        super().__init__(city, max_price, min_bedrooms, min_size_m2)
-        self.property_types = normalize_kamernet_property_types(property_type)
+        self.search_preferences = normalize_kamernet_property_types(property_type)
+        local_property_types = tuple(
+            preference
+            for preference in self.search_preferences
+            if preference in _LOCAL_PROPERTY_TYPES
+        )
+        super().__init__(
+            city,
+            max_price,
+            min_bedrooms,
+            min_size_m2,
+            property_types=local_property_types,
+            furnished="furnished" in self.search_preferences,
+        )
 
     def _build_url(self, page_no: int = 1) -> str:
         city_slug = self.city.lower().replace(" ", "-")
@@ -79,7 +94,7 @@ class KamernetScraper(BaseScraper):
             "radius": KAMERNET_SEARCH_RADIUS_KM,
             "pageNo": max(1, int(page_no)),
         }
-        search_categories = _search_categories_for_property_types(self.property_types)
+        search_categories = _search_categories_for_property_types(self.search_preferences)
         if search_categories:
             params["searchCategories"] = search_categories
         if self.max_price:
@@ -203,6 +218,8 @@ class KamernetScraper(BaseScraper):
             title = item.get("title") or street or f"Kamernet listing {listing_id}"
             address = f"{street}, {city}" if street else city
             image_url = _pick_image_url(item)
+            listing_type = _first_present_int(item, "listingType")
+            furnishing_id = _first_present_int(item, "furnishingId")
 
             return Listing(
                 id=listing_id,
@@ -217,6 +234,8 @@ class KamernetScraper(BaseScraper):
                 price_eur=price_eur,
                 bedrooms=bedrooms,
                 size_m2_value=size_value,
+                property_type=_DETAIL_TYPE_BY_LISTING_TYPE.get(listing_type),
+                furnishing="furnished" if furnishing_id == _FURNISHED_ID else None,
             )
         except Exception as exc:
             logger.warning("Kamernet item parse error: %s", exc)
@@ -251,6 +270,7 @@ class KamernetScraper(BaseScraper):
                     price_eur=price_eur,
                     size_m2=f"{size_value} m2" if size_value else None,
                     size_m2_value=size_value,
+                    property_type=_property_type_from_url(href),
                 )
             )
         return listings
@@ -371,7 +391,12 @@ def _find_listing_items(page_props: dict) -> list[dict]:
 
 def _build_detail_url_path(item: dict, city: str, listing_id: str) -> str:
     listing_type = _first_present_int(item, "listingType")
-    type_slug = _DETAIL_TYPE_BY_LISTING_TYPE.get(listing_type, "apartment")
+    type_slug = _DETAIL_TYPE_BY_LISTING_TYPE.get(listing_type, "apartment").replace("_", "-")
     city_slug = item.get("citySlug") or city.lower().replace(" ", "-")
     street_slug = item.get("streetSlug") or city_slug
     return f"/en/for-rent/{type_slug}-{city_slug}/{street_slug}/{type_slug}-{listing_id}"
+
+
+def _property_type_from_url(url: str) -> str | None:
+    match = re.search(r"/for-rent/(room|apartment|studio|anti-squat)-", url, re.I)
+    return match.group(1).lower().replace("-", "_") if match else None

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 import re
 
@@ -17,6 +18,8 @@ class Listing:
     price_eur: int | None = None
     bedrooms: int | None = None
     size_m2_value: int | None = None
+    property_type: str | None = None
+    furnishing: str | None = None
 
 
 class BaseScraper(ABC):
@@ -29,11 +32,15 @@ class BaseScraper(ABC):
         max_price: int = 2000,
         min_bedrooms: int = 1,
         min_size_m2: int = 0,
+        property_types: str | Iterable[str] | None = None,
+        furnished: bool = False,
     ):
         self.city = city.strip() or "Amsterdam"
         self.max_price = max_price
         self.min_bedrooms = min_bedrooms
         self.min_size_m2 = min_size_m2
+        self.property_types = normalize_property_types(property_types)
+        self.furnished = furnished
 
     @abstractmethod
     async def scrape(self) -> list[Listing]:
@@ -49,7 +56,33 @@ class BaseScraper(ABC):
             return False
         if self.min_size_m2 and listing.size_m2_value and listing.size_m2_value < self.min_size_m2:
             return False
+        if self.property_types and listing.property_type not in self.property_types:
+            return False
+        if self.furnished and listing.furnishing not in {"furnished", "upholstered_or_furnished"}:
+            return False
         return True
+
+
+def normalize_property_types(value: str | Iterable[str] | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    values = re.split(r"[,;\n]+", value) if isinstance(value, str) else value
+    return tuple(dict.fromkeys(str(item).strip().lower() for item in values if str(item).strip()))
+
+
+def parse_furnishing(text: str | None) -> str | None:
+    if not text:
+        return None
+    normalized = " ".join(text.lower().split())
+    if "upholstered or furnished" in normalized or "gestoffeerd of gemeubileerd" in normalized:
+        return "upholstered_or_furnished"
+    if "furnished" in normalized or "gemeubileerd" in normalized:
+        return "furnished"
+    if "upholstered" in normalized or "gestoffeerd" in normalized:
+        return "upholstered"
+    if re.search(r"\bshell\b|\bkaal\b", normalized):
+        return "shell"
+    return None
 
 
 def parse_euro_amount(text: str | None) -> int | None:

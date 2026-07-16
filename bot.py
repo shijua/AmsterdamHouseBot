@@ -166,11 +166,15 @@ async def _run_scheduled_scan_for_user(
 
 
 def _scan_job_kwargs(interval_seconds: int) -> dict:
-    return {
+    job_kwargs = {
         "coalesce": True,
         "max_instances": 1,
         "misfire_grace_time": max(5, interval_seconds),
     }
+    jitter_seconds = max(0, config.SCAN_JITTER_SECONDS)
+    if jitter_seconds:
+        job_kwargs["jitter"] = jitter_seconds
+    return job_kwargs
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -219,9 +223,12 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await db.set_setup_in_progress(chat_id, True)
 
     await update.message.reply_text(
-        "Kamernet property types?\n"
+        "Rental preferences?\n"
         "Tap one or more options, then Done.\n"
-        "Choose Any property type to skip this filter.",
+        "Apartment applies to Kamernet, Huurwoningen, Pararius, and Funda.\n"
+        "Furnished applies to Kamernet, Huurwoningen, and Pararius.\n"
+        "Short/Long Term remain Kamernet-only.\n"
+        "Choose Any property type to skip these preferences.",
         reply_markup=ReplyKeyboardMarkup(
             _property_type_keyboard(),
             one_time_keyboard=False,
@@ -590,11 +597,11 @@ def _parse_property_type_choices(text: str | None) -> tuple[list[str], list[str]
 
 def _format_property_type_selection(property_types: list[str]) -> str:
     if not property_types:
-        return "No property types selected. Tap Done for Any property type."
+        return "No preferences selected. Tap Done for Any property type."
     selected = format_kamernet_property_types(property_types)
     return (
         f"Selected: {selected}\n"
-        "Choose another property type, tap a selected type again to remove it, or tap Done."
+        "Choose another preference, tap a selected option again to remove it, or tap Done."
     )
 
 
@@ -604,7 +611,7 @@ def _format_filters(user_filters: dict) -> str:
     price_text = f"EUR {max_price}/month" if max_price else "No limit"
     bedrooms_text = user_filters["min_bedrooms"] or "No minimum"
     size_text = f"{min_size} m2" if min_size else "No minimum"
-    kamernet_property_type = format_kamernet_property_types(
+    property_preferences = format_kamernet_property_types(
         user_filters.get("kamernet_property_type", DEFAULT_KAMERNET_PROPERTY_TYPE),
     )
     status_text = "Setup in progress"
@@ -614,7 +621,9 @@ def _format_filters(user_filters: dict) -> str:
     return (
         "Active filters:\n"
         f"City: {user_filters['city']}\n"
-        f"Kamernet property types: {kamernet_property_type}\n"
+        f"Rental preferences: {property_preferences}\n"
+        "Apartment sources: Kamernet, Huurwoningen, Pararius, Funda\n"
+        "Furnished sources: Kamernet, Huurwoningen, Pararius\n"
         "Kamernet search radius: 5 km\n"
         f"Max rent: {price_text}\n"
         f"Minimum bedrooms/rooms: {bedrooms_text}\n"
@@ -643,7 +652,10 @@ def _format_command_help() -> str:
         "/clear - clear sent/seen listings\n"
         "/cancel - cancel the /search setup flow\n\n"
         "/search options:\n"
-        f"Property types: {property_types}\n"
+        f"Rental preferences: {property_types}\n"
+        "Apartment: Kamernet, Huurwoningen, Pararius, Funda\n"
+        "Furnished: Kamernet, Huurwoningen, Pararius\n"
+        "Short/Long Term: Kamernet only\n"
         "Max rent: number in EUR, or 0 for no limit\n"
         "Minimum bedrooms/rooms: number, or 0 for no minimum\n"
         "Minimum size: number in m2, or 0 for no minimum"
