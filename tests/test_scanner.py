@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 import scanner
-from scrapers.base import Listing
+from scrapers.base import ForbiddenResponseError, Listing
 
 
 def _filters() -> dict:
@@ -43,6 +43,12 @@ class _FakeScraper:
 
 
 class ScannerTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        scanner._FORBIDDEN_CIRCUITS.clear()
+
+    def tearDown(self):
+        scanner._FORBIDDEN_CIRCUITS.clear()
+
     def test_build_scraper_routes_supported_preferences_per_source(self):
         user_filters = {
             **_filters(),
@@ -101,6 +107,51 @@ class ScannerTests(unittest.IsolatedAsyncioTestCase):
                     scanner.VVA_SOURCE,
                 ),
             )
+
+    def test_forbidden_circuit_uses_progressive_backoff_and_resets_on_success(self):
+        with (
+            patch.object(scanner.config, "FORBIDDEN_FAILURE_THRESHOLD", 3),
+            patch.object(scanner.config, "FORBIDDEN_BACKOFF_SECONDS", (6, 12, 24)),
+        ):
+            self.assertEqual(scanner._record_forbidden_response("pararius", now=100), (1, 0))
+            self.assertEqual(scanner._record_forbidden_response("pararius", now=101), (2, 0))
+            self.assertEqual(scanner._record_forbidden_response("pararius", now=102), (3, 6))
+            self.assertEqual(scanner._forbidden_circuit_remaining("pararius", now=103), 5)
+
+            self.assertEqual(scanner._record_forbidden_response("pararius", now=108), (4, 12))
+            self.assertEqual(scanner._record_forbidden_response("pararius", now=120), (5, 24))
+            self.assertEqual(scanner._record_forbidden_response("pararius", now=144), (6, 24))
+
+        self.assertTrue(scanner._record_source_success("pararius"))
+        self.assertEqual(scanner._forbidden_circuit_remaining("pararius", now=145), 0)
+
+    async def test_open_forbidden_circuit_skips_future_scrapes(self):
+        class ForbiddenScraper:
+            SOURCE = "huurwoningen"
+
+            async def scrape(self):
+                raise ForbiddenResponseError(self.SOURCE)
+
+        with (
+            patch.object(scanner.config, "FORBIDDEN_FAILURE_THRESHOLD", 1),
+            patch.object(scanner.config, "FORBIDDEN_BACKOFF_SECONDS", (60,)),
+            patch("scanner._scan_is_current", AsyncMock(return_value=True)),
+            patch("scanner._build_scraper", return_value=ForbiddenScraper()) as build_scraper,
+        ):
+            first_count = await scanner.run_scan_for_user(
+                bot=object(),
+                user_filters=_filters(),
+                sources=("huurwoningen",),
+            )
+            second_count = await scanner.run_scan_for_user(
+                bot=object(),
+                user_filters=_filters(),
+                sources=("huurwoningen",),
+            )
+
+        self.assertEqual(first_count, 0)
+        self.assertEqual(second_count, 0)
+        self.assertEqual(build_scraper.call_count, 1)
 
     async def test_run_scan_for_user_scans_sources_concurrently_and_batches_db(self):
         started: set[str] = set()

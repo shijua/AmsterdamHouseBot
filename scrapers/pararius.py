@@ -5,7 +5,14 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from .base import BaseScraper, Listing, parse_euro_amount, parse_first_int, parse_furnishing
+from .base import (
+    BaseScraper,
+    ForbiddenResponseError,
+    Listing,
+    parse_euro_amount,
+    parse_first_int,
+    parse_furnishing,
+)
 from .http_clients import close_httpx_client, close_shared_session, get_httpx_client, get_shared_session
 
 logger = logging.getLogger(__name__)
@@ -55,7 +62,7 @@ class ParariusScraper(BaseScraper):
             return listings
         except Exception as exc:
             logger.error("Pararius scrape error: %s", exc)
-            return []
+            raise
 
     async def _fetch_pages(self) -> list[tuple[str, str]]:
         page_specs = (
@@ -80,15 +87,21 @@ class ParariusScraper(BaseScraper):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         pages: list[tuple[str, str]] = []
+        errors: list[Exception] = []
         saw_forbidden = False
         for (label, url), result in zip(page_specs, results, strict=True):
             if isinstance(result, Exception):
+                errors.append(result)
                 saw_forbidden = saw_forbidden or _is_forbidden_error(result)
                 logger.warning("Pararius %s page failed from %s: %s", label, url, result)
                 continue
             pages.append((label, result))
         if saw_forbidden:
             await self._reset_shared_transport_after_forbidden()
+            if not pages:
+                raise ForbiddenResponseError(self.SOURCE)
+        if not pages and errors:
+            raise errors[0]
         return pages
 
     async def _fetch_page(self, session, label: str, url: str) -> str:

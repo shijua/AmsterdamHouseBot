@@ -19,6 +19,16 @@ def _parse_bool(raw_value: str) -> bool:
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_positive_ints(raw_value: str, name: str) -> tuple[int, ...]:
+    try:
+        values = tuple(int(item.strip()) for item in raw_value.split(",") if item.strip())
+    except ValueError:
+        sys.exit(f"ERRORE: {name} deve contenere interi separati da virgole")
+    if not values or any(value <= 0 for value in values):
+        sys.exit(f"ERRORE: {name} deve contenere solo interi positivi")
+    return values
+
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "900"))
 FAST_POLL_INTERVAL_SECONDS = int(
@@ -28,6 +38,11 @@ FAST_POLL_INTERVAL_SECONDS = int(
     )
 )
 SCAN_JITTER_SECONDS = int(os.getenv("SCAN_JITTER_SECONDS", "30"))
+FORBIDDEN_FAILURE_THRESHOLD = max(1, int(os.getenv("FORBIDDEN_FAILURE_THRESHOLD", "3")))
+FORBIDDEN_BACKOFF_SECONDS = _parse_positive_ints(
+    os.getenv("FORBIDDEN_BACKOFF_SECONDS", "21600,43200,86400"),
+    "FORBIDDEN_BACKOFF_SECONDS",
+)
 PARARIUS_POLL_INTERVAL_SECONDS = FAST_POLL_INTERVAL_SECONDS
 ROOFZ_POLL_INTERVAL_SECONDS = FAST_POLL_INTERVAL_SECONDS
 SCRAPER_TIMEOUT_SECONDS = int(os.getenv("SCRAPER_TIMEOUT_SECONDS", "45"))

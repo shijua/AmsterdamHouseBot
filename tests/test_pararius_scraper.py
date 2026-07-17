@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from scrapers.base import ForbiddenResponseError
 from scrapers.pararius import ParariusScraper
 
 
@@ -153,12 +154,12 @@ class ParariusScraperTests(unittest.IsolatedAsyncioTestCase):
             patch("scrapers.pararius._USE_CURL", True),
             patch("scrapers.pararius.close_shared_session", AsyncMock()) as close_shared_session,
         ):
-            pages = await scraper._fetch_with_session(
-                FakeSession(),
-                (("city", "https://example.test/city"),),
-            )
+            with self.assertRaises(ForbiddenResponseError):
+                await scraper._fetch_with_session(
+                    FakeSession(),
+                    (("city", "https://example.test/city"),),
+                )
 
-        self.assertEqual(pages, [])
         close_shared_session.assert_awaited_once_with("pararius")
 
 

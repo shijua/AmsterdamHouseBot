@@ -4,7 +4,14 @@ from urllib.parse import urlencode, urljoin
 
 from bs4 import BeautifulSoup
 
-from .base import BaseScraper, Listing, parse_euro_amount, parse_first_int, parse_furnishing
+from .base import (
+    BaseScraper,
+    ForbiddenResponseError,
+    Listing,
+    parse_euro_amount,
+    parse_first_int,
+    parse_furnishing,
+)
 from .http_clients import close_httpx_client, close_shared_session, get_httpx_client, get_shared_session
 
 logger = logging.getLogger(__name__)
@@ -83,8 +90,9 @@ class HuurwoningenScraper(BaseScraper):
         except Exception as exc:
             if _is_forbidden_error(exc):
                 await self._reset_shared_transport_after_forbidden()
+                raise ForbiddenResponseError(self.SOURCE) from exc
             logger.error("Huurwoningen scrape error: %s", exc)
-            return []
+            raise
 
     async def _reset_shared_transport_after_forbidden(self) -> None:
         if _USE_CURL:

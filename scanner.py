@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Iterable
+from dataclasses import dataclass
 from html import escape
 import logging
 import time
@@ -10,6 +11,7 @@ from telegram.constants import ParseMode
 import config
 import db
 from kamernet_autoreply import KamernetAutoReplyResult, send_kamernet_autoreply
+from scrapers.base import ForbiddenResponseError
 from scrapers.funda import FundaScraper
 from scrapers.huurwoningen import HuurwoningenScraper
 from scrapers.kamernet import KamernetScraper, normalize_kamernet_property_types
@@ -33,6 +35,14 @@ FAST_SOURCES = PARARIUS_SOURCES + GENERAL_SOURCES + ROOFZ_SOURCES
 ALL_SOURCES = FAST_SOURCES
 
 _SCAN_LOCKS: dict[tuple[int, str], asyncio.Lock] = {}
+_FORBIDDEN_CIRCUITS: dict[str, "_ForbiddenCircuitState"] = {}
+
+
+@dataclass
+class _ForbiddenCircuitState:
+    consecutive_failures: int = 0
+    cooldown_count: int = 0
+    blocked_until: float = 0.0
 
 
 _FILTER_MATCH_KEYS = (
@@ -102,12 +112,43 @@ async def _scan_source_for_user(
     async with lock:
         source_started_at = time.perf_counter()
         try:
+            cooldown_remaining = _forbidden_circuit_remaining(source)
+            if cooldown_remaining > 0:
+                logger.info(
+                    "%s scan skipped for user %s: HTTP 403 cooldown has %d minute(s) remaining",
+                    source,
+                    chat_id,
+                    int(cooldown_remaining // 60) + 1,
+                )
+                return 0
+
             if not await _scan_is_current(chat_id, user_filters, require_active):
                 logger.info("Scan stopped for user %s/%s before scraping stale filters.", chat_id, source)
                 return 0
 
             scraper = _build_scraper(source, user_filters)
-            listings = await _scrape_with_timing(scraper, chat_id)
+            try:
+                listings = await _scrape_with_timing(scraper, chat_id)
+            except ForbiddenResponseError:
+                failure_count, cooldown_seconds = _record_forbidden_response(source)
+                if cooldown_seconds:
+                    logger.warning(
+                        "%s paused for %.0f hour(s) after %d consecutive HTTP 403 responses",
+                        source,
+                        cooldown_seconds / 3600,
+                        failure_count,
+                    )
+                else:
+                    logger.warning(
+                        "%s HTTP 403 response %d/%d before cooldown",
+                        source,
+                        failure_count,
+                        config.FORBIDDEN_FAILURE_THRESHOLD,
+                    )
+                return 0
+
+            if _record_source_success(source):
+                logger.info("%s recovered from HTTP 403 responses; cooldown state cleared", source)
 
             if not listings:
                 logger.info(
@@ -187,6 +228,32 @@ def _normalize_sources(sources: Iterable[str] | None) -> tuple[str, ...]:
         if source_name not in normalized:
             normalized.append(source_name)
     return tuple(normalized)
+
+
+def _forbidden_circuit_remaining(source: str, *, now: float | None = None) -> float:
+    state = _FORBIDDEN_CIRCUITS.get(source)
+    if state is None:
+        return 0.0
+    current = time.monotonic() if now is None else now
+    return max(0.0, state.blocked_until - current)
+
+
+def _record_forbidden_response(source: str, *, now: float | None = None) -> tuple[int, int]:
+    current = time.monotonic() if now is None else now
+    state = _FORBIDDEN_CIRCUITS.setdefault(source, _ForbiddenCircuitState())
+    state.consecutive_failures += 1
+    if state.consecutive_failures < config.FORBIDDEN_FAILURE_THRESHOLD:
+        return state.consecutive_failures, 0
+
+    backoff_index = min(state.cooldown_count, len(config.FORBIDDEN_BACKOFF_SECONDS) - 1)
+    cooldown_seconds = config.FORBIDDEN_BACKOFF_SECONDS[backoff_index]
+    state.cooldown_count += 1
+    state.blocked_until = current + cooldown_seconds
+    return state.consecutive_failures, cooldown_seconds
+
+
+def _record_source_success(source: str) -> bool:
+    return _FORBIDDEN_CIRCUITS.pop(source, None) is not None
 
 
 def _build_scraper(source: str, user_filters: dict):

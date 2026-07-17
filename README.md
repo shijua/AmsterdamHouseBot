@@ -74,6 +74,8 @@ Create a `.env` file in the project root with the following content:
 TELEGRAM_TOKEN=123456789:replace-with-your-real-token
 FAST_POLL_INTERVAL_SECONDS=900
 SCAN_JITTER_SECONDS=30
+FORBIDDEN_FAILURE_THRESHOLD=3
+FORBIDDEN_BACKOFF_SECONDS=21600,43200,86400
 SCRAPER_TIMEOUT_SECONDS=45
 KAMERNET_AUTOREPLY_TIMEOUT_SECONDS=45
 KAMERNET_AUTOREPLY_MAX_PER_SCAN=2
@@ -103,6 +105,8 @@ Environment variables:
 - `TELEGRAM_TOKEN`: required, Telegram bot token from BotFather
 - `FAST_POLL_INTERVAL_SECONDS`: optional, scan interval for every enabled platform, defaults to `PARARIUS_POLL_INTERVAL_SECONDS` when set, otherwise `POLL_INTERVAL_SECONDS` (`900` by default)
 - `SCAN_JITTER_SECONDS`: optional, adds a random delay from zero up to this many seconds to each scheduled scan, defaults to `30`
+- `FORBIDDEN_FAILURE_THRESHOLD`: optional, consecutive HTTP 403 responses before pausing a source, defaults to `3`
+- `FORBIDDEN_BACKOFF_SECONDS`: optional, comma-separated source cooldowns after repeated HTTP 403 responses, defaults to `21600,43200,86400` (6, 12, and 24 hours)
 - `POLL_INTERVAL_SECONDS`: optional, legacy fallback used only to derive `FAST_POLL_INTERVAL_SECONDS`, defaults to `900`
 - `PARARIUS_POLL_INTERVAL_SECONDS`: optional, legacy fallback for `FAST_POLL_INTERVAL_SECONDS`
 - `ROOFZ_POLL_INTERVAL_SECONDS`: deprecated; Roofz now uses the same fast interval as every other enabled platform
@@ -205,6 +209,8 @@ The auto-reply browser needs a normal logged-in Kamernet session. You can either
 2. `bot.py` registers commands and schedules the recurring scan job.
 3. `scanner.py` runs selected scrapers for each active user, with all enabled source groups scheduled on the same fast cadence.
 4. `db.py` stores filters and deduplicates listings in SQLite.
+
+When a source returns HTTP 403 three times in a row, the scanner stops contacting that source for 6 hours. A failed recovery probe increases the cooldown to 12 hours and then 24 hours; a successful response clears the cooldown immediately.
 
 ## Project Structure
 

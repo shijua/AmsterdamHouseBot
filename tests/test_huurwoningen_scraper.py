@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 from bs4 import BeautifulSoup
 
+from scrapers.base import ForbiddenResponseError
 from scrapers.huurwoningen import HuurwoningenScraper
 
 
@@ -84,9 +85,9 @@ class HuurwoningenScraperTests(unittest.IsolatedAsyncioTestCase):
             patch("scrapers.huurwoningen.get_shared_session", AsyncMock(return_value=FakeSession())),
             patch("scrapers.huurwoningen.close_shared_session", AsyncMock()) as close_shared_session,
         ):
-            listings = await scraper.scrape()
+            with self.assertRaises(ForbiddenResponseError):
+                await scraper.scrape()
 
-        self.assertEqual(listings, [])
         close_shared_session.assert_awaited_once_with("huurwoningen")
 
 

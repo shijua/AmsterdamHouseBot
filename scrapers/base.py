@@ -4,6 +4,14 @@ from dataclasses import dataclass
 import re
 
 
+class ForbiddenResponseError(RuntimeError):
+    """Raised when a source rejects a scrape with HTTP 403."""
+
+    def __init__(self, source: str):
+        self.source = source
+        super().__init__(f"{source} returned HTTP 403")
+
+
 @dataclass
 class Listing:
     id: str
